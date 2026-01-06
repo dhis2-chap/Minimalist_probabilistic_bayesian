@@ -1,8 +1,9 @@
 import argparse
 
 import joblib
+import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import BayesianRidge
 from utils import get_df_per_location, create_lagged_feature, cut_top_rows
 
 
@@ -20,7 +21,7 @@ def train(csv_fn, model_fn):
 def train_single_region(df, location):
     #features = ['rainfall', 'mean_temperature', 'last_rainfall', 'last_disease_cases']
     features = ['rainfall', 'mean_temperature']
-    X = df[features]
+    X = df[features].copy()
     df['disease_cases'] = df['disease_cases'].fillna(0)  # set NaNs to zero (not a good solution, just for the example to work)
     Y = df['disease_cases']
     # X['last_rainfall'] = df['rainfall'].shift(1)
@@ -31,12 +32,13 @@ def train_single_region(df, location):
     X = cut_top_rows(X, 1)
     Y = cut_top_rows(Y, 1)
 
-    model = LinearRegression()
-    print(X)
-    model.fit(X, Y)
+    model = BayesianRidge()
+    # Convert to numpy with explicit dtype for consistency with prediction
+    X_train = X.to_numpy(dtype=np.float64, copy=True)
+    Y_train = Y.to_numpy(dtype=np.float64, copy=True)
+    model.fit(X_train, Y_train)
     # model.last_disease_cases = Y.iloc[-1]
     # model.last_rainfall = X['rainfall'].iloc[-1]
-    print(f"Train - model coefficients for location {location}: ", list(zip(features, model.coef_)))
     return model
 
 if __name__ == "__main__":

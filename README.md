@@ -1,5 +1,5 @@
-# Minimalist example of model integration with lagged features 
-This document demonstrates a minimalist example of how to write a functional CHAP-compatible forecasting model with lagged features. The example is based on the same simplistic regression as the "minimalist_multiregion" model, but also demonstrates how to include lagged features in your model.  
+# Minimalist example of uncertainty quantification with built-in standard deviation
+This document demonstrates a minimalist example of how to write a functional CHAP-compatible forecasting model that generates probabilistic predictions using models with built-in uncertainty estimates. The example extends the lagged features tutorial by using a model that provides standard deviation estimates, enabling the generation of multiple samples from the predictive distribution.  
 
 ## Running the model without CHAP integration
 The example can be run in isolation (e.g. from the command line) using the file isolated_run.py:
@@ -7,35 +7,34 @@ The example can be run in isolation (e.g. from the command line) using the file 
 python isolated_run.py  
 ```
 
-For details on code files and data, please consult the "minimalist_multiregion" model. The only differences are that:
+For details on code files and data, please consult the "minimalist_example_lag" tutorial. The key differences are:
 
-* The train function (in "train.py") now adds lagged features to the covariate matrix using the "create_lagged_feature" utility function found in "utils.py": 
-```csv
-    create_lagged_feature(X, 'mean_temperature', 1)
-    create_lagged_feature(X, 'rainfall', 1)
-    create_lagged_feature(X, 'disease_cases', 1, df)
+* The train function (in "train.py") uses `BayesianRidge` regression instead of standard linear regression. This model provides built-in uncertainty estimates through its `return_std` parameter:
+```python
+    model = BayesianRidge()
+    X_train = X.to_numpy(dtype=np.float64, copy=True)
+    Y_train = Y.to_numpy(dtype=np.float64, copy=True)
+    model.fit(X_train, Y_train)
 ```
-The first row of `mean_temperature_lag_1` and `rainfall_lag_1` is missing because these lagged features require the previous day’s values, which don’t exist for the very first day in the dataset. Therefore we remove the first row from `X`. Correspondingly, we also remove the first row from the target disease_case values `Y` so that inputs and targets are aligned.
-```csv
-    X = cut_top_rows(X, 1)
-    Y = cut_top_rows(Y, 1)
-```
+Note: The conversion to numpy arrays with explicit `dtype=np.float64` ensures compatibility with numpy 2.x.
 
-* The `predict` function (in `predict.py`) must create the same lagged features as used during training. Here, however, we have the lagged feature values for the first day in `historic_data_fn`, so we use them to fill in the missing values for the lagged features using the `fill_top_rows_from_historic_last_rows` utility function:
-```csv
-    fill_top_rows_from_historic_last_rows('mean_temperature', 1, X, historic_df)
-        fill_top_rows_from_historic_last_rows('rainfall', 1, X, historic_df)
+* The `predict` function (in `predict.py`) leverages the model's built-in standard deviation to generate multiple probabilistic samples. Instead of a single point prediction, we generate 100 samples from the predictive distribution:
+```python
+    y_one_pred, std = model.predict(X_input, return_std=True)
+    samples = np.random.normal(y_one_pred, std, size=number_of_samples)
 ```
+These samples are stored in columns `sample_0`, `sample_1`, ..., `sample_99`, representing different possible realizations of the forecast given the model's uncertainty.
 
-Since each prediction now depends on the previous day’s disease cases, we implement an autoregressive loop that iteratively generates predictions for as many time steps as specified by `future_climate_data`:
-```csv
+* The autoregressive prediction loop now incorporates uncertainty at each step:
+```python
     prev_disease = historic_df['disease_cases'].iloc[-1]
-        for i in range(X.shape[0]):
-            X.loc[i,last_disease_col] = prev_disease
-            y_one_pred = model.predict(X.iloc[i:i+1])
-            df.loc[i,'sample_0'] = y_one_pred
-
-            prev_disease = y_one_pred
+    for i in range(X.shape[0]):
+        X.loc[i, last_disease_col] = prev_disease
+        X_input = X.iloc[i:i+1].to_numpy(dtype=np.float64, copy=True)
+        y_one_pred, std = model.predict(X_input, return_std=True)
+        samples = np.random.normal(y_one_pred, std, size=number_of_samples)
+        samples_array[i, :] = samples
+        prev_disease = y_one_pred
 ```
 
 ## Running the minimalist model as part of CHAP
