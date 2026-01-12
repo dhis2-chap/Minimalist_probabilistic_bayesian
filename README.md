@@ -1,11 +1,41 @@
 # Minimalist example of uncertainty quantification with built-in standard deviation
 This document demonstrates a minimalist example of how to write a functional CHAP-compatible forecasting model that generates probabilistic predictions using models with built-in uncertainty estimates. The example extends the lagged features tutorial by using a model that provides standard deviation estimates, enabling the generation of multiple samples from the predictive distribution.  
 
+## Setting Up the Environment
+Before running this example, you need to have Python installed on your system.
+
+We recommend that you create a virtual environment to isolate the dependencies for this project. This prevents conflicts with other Python projects and keeps your system clean. You can do this using the built-in `venv` module in Python (explained beneath) or by using the tool `uv`. If you are new to virtual environments, you can check out our [guide on virtual environments](https://chap.dhis2.org/tech-intro/virtual-environments/).
+
+If you are on Windows, we assume you are using WSL ([see our terminal setup guide here](https://chap.dhis2.org/tech-intro/terminal/)).
+
+1. Create a virtual environment:
+```bash
+python -m venv venv
+```
+
+2. Activate the virtual environment:
+```bash
+source venv/bin/activate
+```
+
+3. Install the required dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+This will install the following packages:
+- `numpy` - numerical computing
+- `pandas` - data manipulation
+- `scikit-learn` - machine learning (includes BayesianRidge)
+- `joblib` - model serialization
+
 ## Running the model without CHAP integration
 The example can be run in isolation (e.g. from the command line) using the file isolated_run.py:
 ```
-python isolated_run.py  
+python isolated_run.py
 ```
+
+The output data (predictions with uncertainty samples) will be stored in the `./output/` directory.
 
 For details on code files and data, please consult the "minimalist_example_lag" tutorial. The key differences are:
 
@@ -36,6 +66,10 @@ These samples are stored in columns `sample_0`, `sample_1`, ..., `sample_99`, re
         samples_array[i, :] = samples
         prev_disease = y_one_pred
 ```
+
+### Understanding uncertainty in predictions
+
+The standard deviation (`std`) returned by BayesianRidge quantifies how uncertain the model is about its prediction. A larger standard deviation means the model is less confident. By sampling from a normal distribution centered on the prediction with this standard deviation, we generate multiple plausible outcomes that reflect this uncertainty. This is essential for probabilistic forecasting, where we want to communicate not just a single "best guess" but a range of possible futures.
 
 ## Running the minimalist model as part of CHAP
 To run the model in CHAP, we define the model interface in an MLFlow-based yaml specification as we did in the previous examples (in the file "MLproject", which defines :
